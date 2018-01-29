@@ -1,0 +1,103 @@
+
+const int maxOsPath = 260;
+const int maxSplitScreenClients = 2;
+
+enum COMMAND { 
+    SIGNON = 1, 
+    PACKET, 
+    SYNCTICK,
+    CONSOLE,
+    USER,
+    DATA_TABLES,
+    STOP,
+    CUSTOM_DATA,
+    STRING_TABLES
+};
+
+SetForeColor( cRed );
+struct Header {
+    char filestamp[8];
+    int32 protocol;
+    int32 networkProtocol;
+    char serverName[maxOsPath];
+    char clientName[maxOsPath];
+    char mapName[maxOsPath];
+    char gameDirectory[maxOsPath];
+    float playbackTime;
+    int32 playbackTicks;
+    int32 playbackFrames;
+    int32 signOnLenght;
+} header;
+SetForeColor( cNone );
+
+struct QAngle {
+    float pitch;
+    float yaw;
+    float roll;
+};
+
+struct Vector {
+    float x;
+    float y;
+    float z;
+};
+
+struct OriginViewAngles {
+    Vector viewOrigin;
+    QAngle viewAngles;
+    QAngle localViewAngles;
+};
+
+struct SplitCmdInfo {
+    int32 flags;
+    OriginViewAngles original;
+    OriginViewAngles resampled;
+};
+
+struct SeqBytes {
+    int32 lenght;
+    char data[lenght];    
+};
+
+local int i = 0;
+while(i == 0)
+{
+    ubyte cmd;
+    int32 tick;
+    ubyte playerSlot;
+
+    switch (cmd) {
+        case PACKET:
+        case SIGNON:
+            struct {
+                SplitCmdInfo cmdInfo[maxSplitScreenClients] <optimize=false>;
+                char unknown2[8];
+                SeqBytes data;
+            } cmdInfo; 
+            break;
+        case SYNCTICK:
+            break;
+        case CONSOLE:
+            SeqBytes consoleCmd; 
+            break;
+        case USER:
+            SeqBytes userInfo; 
+            break;
+        case DATA_TABLES:
+            SeqBytes dataTable; 
+            break;
+        case STOP:
+            Printf("It's over!");
+            i = 1;
+            break;
+        case CUSTOM_DATA:
+            Printf("Custom data not supported"); 
+            break;
+        case STRING_TABLES: 
+            SeqBytes stringTable; 
+            break; 
+        default:
+            Printf("Seems happened is strange thing");
+            return;
+    }
+}
