@@ -14,15 +14,15 @@ const (
 type command int
 
 const (
-	signOn command = iota + 1
-	packet
-	synctick
-	console
-	user
-	dataTables
-	stop
-	customData
-	stringTables
+	cmdSignOn command = iota + 1
+	cmdPacket
+	cmdSynctick
+	cmdConsole
+	cmdUser
+	cmdDataTables
+	cmdStop
+	cmdCustomData
+	cmdStringTables
 )
 
 // Header represents header of demofile
@@ -73,6 +73,17 @@ type PlayerInfo struct {
 	IsHLTV          bool
 	CustomFiles     [maxCustomFiles]int32
 	FilesDownloaded int8
+}
+
+type Packet struct {
+	Cmd        int8
+	Tick       int32
+	PlayerSlot int8
+}
+
+type Chunk struct {
+	Lenght int32
+	Data   []byte
 }
 
 // Data represents common info on moment ingame tick
