@@ -18,3 +18,20 @@ func TestDemofileOpen(t *testing.T) {
 	}
 
 }
+
+func BenchmarkDemofileOpen1(b *testing.B) {
+	b.ReportAllocs()
+
+	for n := 0; n < b.N; n++ {
+		dem, err := demofile.NewDemofile("testdata/demos/cache_9-21_mm.dem", false)
+		if err != nil {
+			b.Error(err)
+		}
+
+		err = dem.Start()
+		if err != nil {
+			b.Error(err)
+		}
+	}
+
+}
