@@ -5,6 +5,10 @@ import (
 	"os"
 )
 
+const (
+	maxSizeOfBuffer = 8192 << 10
+)
+
 type Demofile struct {
 	file io.Reader
 }
