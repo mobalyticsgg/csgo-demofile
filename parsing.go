@@ -23,5 +23,5 @@ func (p Parser) Parse(buf []byte) error {
 }
 
 func (p *Parser) parseHeader() error {
-
+	return nil
 }
