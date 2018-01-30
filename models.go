@@ -2,6 +2,15 @@ package demofile
 
 import "github.com/golang/geo/r3"
 
+const (
+	maxFilestampSize = 8
+	maxOsPath        = 260
+	maxSplitScreens  = 2
+	maxCustomFiles   = 4
+	maxPlayerName    = 128
+	signedGUIDLen    = 33
+)
+
 type command int
 
 const (
@@ -25,24 +34,17 @@ type Header struct {
 	ClientName      string
 	MapName         string
 	GameDirectory   string
-	PlaybackTime    float64
+	PlaybackTime    float32
 	PlaybackTicks   int32
 	PlaybackFrames  int32
 	SignOnLenght    int32
 }
 
-// QAngle represents angle in demofile
-type QAngle struct {
-	Pitch float64
-	Yaw   float64
-	Roll  float64
-}
-
 // OriginViewAngles represents container with view and angle
 type OriginViewAngles struct {
 	ViewOrigin      r3.Vector
-	ViewAngles      QAngle
-	LocalViewAngles QAngle
+	ViewAngles      r3.Vector
+	LocalViewAngles r3.Vector
 }
 
 // SplitCmdInfo represents part of cmd info packet
@@ -50,6 +52,27 @@ type SplitCmdInfo struct {
 	Flags     int32
 	Original  OriginViewAngles
 	Resampled OriginViewAngles
+}
+
+// CmdInfo represents cmd info packet
+type CmdInfo struct {
+	Parts [maxSplitScreens]SplitCmdInfo
+	Data  []byte
+}
+
+// PlayerInfo represents player info
+type PlayerInfo struct {
+	Version         int64
+	XUID            int64
+	Name            [maxPlayerName]byte
+	UserID          int
+	GUID            [signedGUIDLen]byte
+	FriendsID       uint32
+	FriendsName     [maxPlayerName]byte
+	FakePlayer      bool
+	IsHLTV          bool
+	CustomFiles     [maxCustomFiles]int32
+	FilesDownloaded int8
 }
 
 // Data represents common info on moment ingame tick

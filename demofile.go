@@ -14,6 +14,8 @@ type Demofile struct {
 	file io.Reader
 	size int64
 	buf  []byte
+
+	parser *Parser
 }
 
 func NewDemofile(file string) (*Demofile, error) {
@@ -28,9 +30,10 @@ func NewDemofile(file string) (*Demofile, error) {
 	}
 
 	return &Demofile{
-		file: readFile,
-		size: stat.Size(),
-		buf:  make([]byte, stat.Size()/maxSizeDelim),
+		file:   readFile,
+		size:   stat.Size(),
+		buf:    make([]byte, stat.Size()/maxSizeDelim),
+		parser: NewParser(),
 	}, nil
 }
 
@@ -43,6 +46,15 @@ func (d *Demofile) Start() error {
 			}
 
 			return err
+		}
+
+		success, err := d.parser.Parse(d.buf)
+		if err != nil {
+			return err
+		}
+
+		if !success {
+			fmt.Println("Whoops")
 		}
 
 		fmt.Println("Written", n)
