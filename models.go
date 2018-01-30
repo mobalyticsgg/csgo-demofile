@@ -51,3 +51,7 @@ type SplitCmdInfo struct {
 	Original  OriginViewAngles
 	Resampled OriginViewAngles
 }
+
+// Data represents common info on moment ingame tick
+type Data struct {
+}
