@@ -7,7 +7,7 @@ import (
 )
 
 func TestDemofileOpen(t *testing.T) {
-	dem, err := demofile.NewDemofile("testdata/demos/cache_9-21_mm.dem")
+	dem, err := demofile.NewDemofile("testdata/demos/cache_9-21_mm.dem", false)
 	if err != nil {
 		t.Error(err)
 	}

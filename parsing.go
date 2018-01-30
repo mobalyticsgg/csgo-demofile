@@ -10,6 +10,14 @@ import (
 	"github.com/golang/geo/r3"
 )
 
+const (
+	minSizeToParse = 2
+)
+
+var (
+	errNotSufficientBytes = errors.New("Not sufficient bytes for parse chunk")
+)
+
 type Parser struct {
 	header  *Header
 	packet  *Packet
@@ -17,43 +25,71 @@ type Parser struct {
 	chunk   *Chunk
 
 	processor *barrel.Processor
+
+	isDebug bool
 }
 
-func NewParser() *Parser {
+func NewParser(isDebug bool) *Parser {
 	return &Parser{
 		processor: barrel.NewProcessor([]byte{}).SetEndian(barrel.LittleEndian),
 		packet:    &Packet{},
 		cmdInfo:   &CmdInfo{},
 		chunk:     &Chunk{},
+		isDebug:   isDebug,
 	}
 }
 
-func (p *Parser) Parse(buf []byte) (bool, error) {
+func (p *Parser) Parse(buf []byte) error {
 	err := p.processor.WriteToBuffer(buf)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if p.header == nil {
 		err = p.parseHeader()
 		if err != nil {
-			return false, err
+			return err
 		}
 
-		spew.Dump(p.header)
+		if p.isDebug {
+			spew.Dump(p.header)
+		}
 	}
 
-	return true, nil
+	for {
+		if p.isDebug {
+			fmt.Println("Buffer lenght:", p.processor.Buffer().Len())
+		}
+
+		if p.processor.Buffer().Len() < minSizeToParse {
+			break
+		}
+
+		err := p.handlePacket()
+		if err != nil {
+			if err == errNotSufficientBytes {
+				break
+			}
+
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (p *Parser) handlePacket() (bool, error) {
+func (p *Parser) handlePacket() error {
 	p.processor.
 		ReadInt8(&p.packet.Cmd).
 		ReadInt32(&p.packet.Tick).
 		ReadInt8(&p.packet.PlayerSlot)
 
 	if p.processor.Error() != nil {
-		return false, p.processor.Error()
+		return p.processor.Error()
+	}
+
+	if p.isDebug {
+		fmt.Printf("Cmd - %v, Tick - %v, PlayerSlot - %v\n", p.packet.Cmd, p.packet.Tick, p.packet.PlayerSlot)
 	}
 
 	cmd := command(p.packet.Cmd)
@@ -61,26 +97,28 @@ func (p *Parser) handlePacket() (bool, error) {
 	case cmdSignOn, cmdPacket:
 		err := p.parseCmdInfo()
 		if err != nil {
-			return false, p.processor.Error()
+			return err
 		}
 
 	case cmdSynctick:
-		return false, errors.New("")
+		break
 
 	case cmdConsole, cmdUser, cmdDataTables, cmdStringTables:
 		err := p.parseChunk(cmd)
 		if err != nil {
-			return false, p.processor.Error()
+			return err
 		}
 
 	case cmdStop:
-		return false, nil
+		return nil
 
 	case cmdCustomData:
-		fmt.Println("Found custom data but we don't have any logic for that")
+		if p.isDebug {
+			fmt.Println("Found custom data but we don't have any logic for that")
+		}
 	}
 
-	return true, nil
+	return nil
 }
 
 func (p *Parser) parseHeader() error {
@@ -114,10 +152,18 @@ func (p *Parser) parseHeader() error {
 }
 
 func (p *Parser) parseVector(v *r3.Vector) error {
+	var (
+		x, y, z float32
+	)
+
 	p.processor.
-		ReadFloat64(&v.X).
-		ReadFloat64(&v.Y).
-		ReadFloat64(&v.Z)
+		ReadFloat32(&x).
+		ReadFloat32(&y).
+		ReadFloat32(&z)
+
+	v.X = float64(x)
+	v.Y = float64(y)
+	v.Z = float64(z)
 
 	return p.processor.Error()
 }
@@ -159,17 +205,27 @@ func (p *Parser) parseCmdInfo() error {
 	}
 
 	p.processor.Skip(8)
-	p.parseChunk(cmdPacket)
+	err = p.parseChunk(cmdPacket)
+	if err != nil {
+		return err
+	}
 
 	return p.processor.Error()
 }
 
 func (p *Parser) parseChunk(cmd command) error {
-	p.processor.
-		ReadInt32(&p.chunk.Lenght)
+	p.processor.ReadInt32(&p.chunk.Lenght)
+
+	if p.isDebug {
+		fmt.Println("Chunk lenght:", p.chunk.Lenght)
+	}
 
 	if p.processor.Error() != nil {
 		return p.processor.Error()
+	}
+
+	if p.processor.Buffer().Len() < int(p.chunk.Lenght) {
+		return errNotSufficientBytes
 	}
 
 	// Skip commands
