@@ -28,16 +28,16 @@ const (
 // Header represents header of demofile
 type Header struct {
 	Filestamp       string
-	Protocol        int32
-	NetworkProtocol int32
+	Protocol        uint32
+	NetworkProtocol uint32
 	ServerName      string
 	ClientName      string
 	MapName         string
 	GameDirectory   string
 	PlaybackTime    float32
-	PlaybackTicks   int32
-	PlaybackFrames  int32
-	SignOnLenght    int32
+	PlaybackTicks   uint32
+	PlaybackFrames  uint32
+	SignOnLenght    uint32
 }
 
 // OriginViewAngles represents container with view and angle
@@ -76,13 +76,13 @@ type PlayerInfo struct {
 }
 
 type Packet struct {
-	Cmd        int8
+	Cmd        uint8
 	Tick       int32
-	PlayerSlot int8
+	PlayerSlot uint8
 }
 
 type Chunk struct {
-	Lenght int32
+	Lenght uint32
 	Data   []byte
 }
 

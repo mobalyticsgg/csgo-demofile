@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Nyarum/barrel"
+	"github.com/MobalyticsGG/csgo-demofile/bitparser"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/geo/r3"
 )
 
 const (
 	minSizeToParse = 2
+	numBitsInByte  = 8
 )
 
 var (
@@ -24,29 +25,27 @@ type Parser struct {
 	cmdInfo *CmdInfo
 	chunk   *Chunk
 
-	processor *barrel.Processor
+	bitparser *bitparser.Bitparser
 
 	isDebug bool
 }
 
 func NewParser(isDebug bool) *Parser {
 	return &Parser{
-		processor: barrel.NewProcessor([]byte{}).SetEndian(barrel.LittleEndian),
-		packet:    &Packet{},
-		cmdInfo:   &CmdInfo{},
-		chunk:     &Chunk{},
-		isDebug:   isDebug,
+		packet:  &Packet{},
+		cmdInfo: &CmdInfo{},
+		chunk:   &Chunk{},
+		isDebug: isDebug,
 	}
 }
 
 func (p *Parser) Parse(buf []byte) error {
-	err := p.processor.WriteToBuffer(buf)
-	if err != nil {
-		return err
+	if p.bitparser == nil {
+		p.bitparser = bitparser.NewBitparser(buf)
 	}
 
 	if p.header == nil {
-		err = p.parseHeader()
+		err := p.parseHeader()
 		if err != nil {
 			return err
 		}
@@ -57,10 +56,6 @@ func (p *Parser) Parse(buf []byte) error {
 	}
 
 	for {
-		if p.processor.Buffer().Len() < minSizeToParse {
-			break
-		}
-
 		err := p.handlePacket()
 		if err != nil {
 			if err == errNotSufficientBytes {
@@ -75,13 +70,12 @@ func (p *Parser) Parse(buf []byte) error {
 }
 
 func (p *Parser) handlePacket() error {
-	p.processor.
-		ReadInt8(&p.packet.Cmd).
-		ReadInt32(&p.packet.Tick).
-		ReadInt8(&p.packet.PlayerSlot)
+	p.packet.Cmd = p.bitparser.Byte()
+	p.packet.Tick = p.bitparser.LInt32()
+	p.packet.PlayerSlot = p.bitparser.Byte()
 
-	if p.processor.Error() != nil {
-		return p.processor.Error()
+	if p.bitparser.Error() != nil {
+		return p.bitparser.Error()
 	}
 
 	cmd := command(p.packet.Cmd)
@@ -116,21 +110,20 @@ func (p *Parser) handlePacket() error {
 func (p *Parser) parseHeader() error {
 	p.header = &Header{}
 
-	p.processor.
-		ReadStringWithLen(maxFilestampSize, &p.header.Filestamp).
-		ReadInt32(&p.header.Protocol).
-		ReadInt32(&p.header.NetworkProtocol).
-		ReadStringWithLen(maxOsPath, &p.header.ServerName).
-		ReadStringWithLen(maxOsPath, &p.header.ClientName).
-		ReadStringWithLen(maxOsPath, &p.header.MapName).
-		ReadStringWithLen(maxOsPath, &p.header.GameDirectory).
-		ReadFloat32(&p.header.PlaybackTime).
-		ReadInt32(&p.header.PlaybackTicks).
-		ReadInt32(&p.header.PlaybackFrames).
-		ReadInt32(&p.header.SignOnLenght)
+	p.header.Filestamp = p.bitparser.String(maxFilestampSize)
+	p.header.Protocol = p.bitparser.Le32()
+	p.header.NetworkProtocol = p.bitparser.Le32()
+	p.header.ServerName = p.bitparser.String(maxOsPath)
+	p.header.ClientName = p.bitparser.String(maxOsPath)
+	p.header.MapName = p.bitparser.String(maxOsPath)
+	p.header.GameDirectory = p.bitparser.String(maxOsPath)
+	p.header.PlaybackTime = p.bitparser.Float32()
+	p.header.PlaybackTicks = p.bitparser.Le32()
+	p.header.PlaybackFrames = p.bitparser.Le32()
+	p.header.SignOnLenght = p.bitparser.Le32()
 
-	if p.processor.Error() != nil {
-		return p.processor.Error()
+	if p.bitparser.Error() != nil {
+		return p.bitparser.Error()
 	}
 
 	// Remove \x00 from strings
@@ -144,20 +137,11 @@ func (p *Parser) parseHeader() error {
 }
 
 func (p *Parser) parseVector(v *r3.Vector) error {
-	var (
-		x, y, z float32
-	)
+	v.X = float64(p.bitparser.Float32())
+	v.Y = float64(p.bitparser.Float32())
+	v.Z = float64(p.bitparser.Float32())
 
-	p.processor.
-		ReadFloat32(&x).
-		ReadFloat32(&y).
-		ReadFloat32(&z)
-
-	v.X = float64(x)
-	v.Y = float64(y)
-	v.Z = float64(z)
-
-	return p.processor.Error()
+	return p.bitparser.Error()
 }
 
 func (p *Parser) parseCmdInfo() error {
@@ -176,8 +160,7 @@ func (p *Parser) parseCmdInfo() error {
 	}
 
 	partCmdParse := func(splitCmdInfo *SplitCmdInfo) error {
-		p.processor.ReadInt32(&splitCmdInfo.Flags)
-
+		splitCmdInfo.Flags = p.bitparser.Int32(32)
 		err := originViewParse(&splitCmdInfo.Original)
 		if err != nil {
 			return err
@@ -196,34 +179,29 @@ func (p *Parser) parseCmdInfo() error {
 		return err
 	}
 
-	p.processor.Skip(8)
+	p.bitparser.Skip(8 * numBitsInByte)
 	err = p.parseChunk(cmdPacket)
 	if err != nil {
 		return err
 	}
 
-	return p.processor.Error()
+	return p.bitparser.Error()
 }
 
 func (p *Parser) parseChunk(cmd command) error {
-	p.processor.ReadInt32(&p.chunk.Lenght)
-
-	if p.processor.Error() != nil {
-		return p.processor.Error()
-	}
-
-	if p.processor.Buffer().Len() < int(p.chunk.Lenght) {
-		return errNotSufficientBytes
+	p.chunk.Lenght = p.bitparser.Le32()
+	if p.bitparser.Error() != nil {
+		return p.bitparser.Error()
 	}
 
 	// Skip commands
 	if cmd == cmdUser || cmd == cmdConsole || cmd == cmdPacket {
-		p.processor.Skip(int(p.chunk.Lenght))
+		p.bitparser.Skip(uint(p.chunk.Lenght * numBitsInByte))
 
-		return p.processor.Error()
+		return p.bitparser.Error()
 	}
 
-	p.processor.ReadBytes(&p.chunk.Data, int(p.chunk.Lenght))
+	p.chunk.Data = p.bitparser.Bytes(int(p.chunk.Lenght))
 
 	if cmd == cmdStringTables {
 		fmt.Println(cmd)
@@ -235,27 +213,24 @@ func (p *Parser) parseChunk(cmd command) error {
 		}
 	}
 
-	return p.processor.Error()
+	return p.bitparser.Error()
 }
 
 func (p *Parser) parseStringTables() error {
-	pr := barrel.NewProcessor(p.chunk.Data)
+	br := bitparser.NewBitparser(p.chunk.Data)
 
-	var numTables int8
-	pr.ReadInt8(&numTables)
-	if pr.Error() != nil {
-		return pr.Error()
+	numTables := br.Byte()
+	if br.Error() != nil {
+		return br.Error()
 	}
 
 	for i := 0; i < int(numTables); i++ {
-		var tableName string
-		pr.ReadStringEOF(&tableName)
-
+		tableName := br.ReadStringEOF()
 		if p.isDebug {
 			fmt.Println("Table name:", tableName)
 		}
 
-		err := p.parseStringTable(pr, tableName)
+		err := p.parseStringTable(br, tableName)
 		if err != nil {
 			return err
 		}
@@ -264,54 +239,33 @@ func (p *Parser) parseStringTables() error {
 	return nil
 }
 
-func (p *Parser) parseStringTable(pr *barrel.Processor, tableName string) error {
-	var numStrings int16
-	pr.ReadInt16(&numStrings)
-
+func (p *Parser) parseStringTable(br *bitparser.Bitparser, tableName string) error {
+	numStrings := br.Le16()
+	fmt.Println("num:", numStrings)
 	for i := 0; i < int(numStrings); i++ {
-		var (
-			stringName string
-			pass       bool
-		)
-
-		pr.ReadStringEOF(&stringName)
-		pr.ReadBit(&pass)
-
+		stringName := br.ReadStringEOF()
 		fmt.Println(stringName)
 
+		pass := br.Bit()
+		fmt.Println(pass)
 		if pass {
-			var dataSize uint16
-			pr.ReadUint16(&dataSize)
-
-			data := make([]byte, int(dataSize))
-			pr.ReadBytes(&data, int(dataSize))
+			dataSize := br.Le16()
+			fmt.Println(dataSize)
+			br.Bytes(int(dataSize))
 		}
 	}
 
-	var clientStaffPass bool
-	pr.ReadBit(&clientStaffPass)
-
-	if clientStaffPass {
-		var numStrings uint16
-		pr.ReadUint16(&numStrings)
-
+	if br.Bit() {
+		numStrings := br.Le16()
 		for i := 0; i < int(numStrings); i++ {
-			var (
-				stringName string
-				pass       bool
-			)
-
-			pr.ReadStringEOF(&stringName)
-			pr.ReadBit(&pass)
-
-			if pass {
-				var numFields uint16
-				pr.ReadUint16(&numFields)
-				pr.Skip(int(numFields))
+			br.ReadStringEOF()
+			if br.Bit() {
+				numFields := br.Le16()
+				br.Skip(uint(numFields * numBitsInByte))
 			}
 
 		}
 	}
 
-	return pr.Error()
+	return br.Error()
 }

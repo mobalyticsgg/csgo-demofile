@@ -16,7 +16,6 @@ func TestDemofileOpen(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
 }
 
 func BenchmarkDemofileOpen1(b *testing.B) {
