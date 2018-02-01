@@ -57,10 +57,6 @@ func (p *Parser) Parse(buf []byte) error {
 	}
 
 	for {
-		if p.isDebug {
-			fmt.Println("Buffer lenght:", p.processor.Buffer().Len())
-		}
-
 		if p.processor.Buffer().Len() < minSizeToParse {
 			break
 		}
@@ -86,10 +82,6 @@ func (p *Parser) handlePacket() error {
 
 	if p.processor.Error() != nil {
 		return p.processor.Error()
-	}
-
-	if p.isDebug {
-		fmt.Printf("Cmd - %v, Tick - %v, PlayerSlot - %v\n", p.packet.Cmd, p.packet.Tick, p.packet.PlayerSlot)
 	}
 
 	cmd := command(p.packet.Cmd)
@@ -216,10 +208,6 @@ func (p *Parser) parseCmdInfo() error {
 func (p *Parser) parseChunk(cmd command) error {
 	p.processor.ReadInt32(&p.chunk.Lenght)
 
-	if p.isDebug {
-		fmt.Println("Chunk lenght:", p.chunk.Lenght)
-	}
-
 	if p.processor.Error() != nil {
 		return p.processor.Error()
 	}
@@ -237,5 +225,93 @@ func (p *Parser) parseChunk(cmd command) error {
 
 	p.processor.ReadBytes(&p.chunk.Data, int(p.chunk.Lenght))
 
+	if cmd == cmdStringTables {
+		fmt.Println(cmd)
+		fmt.Println(p.packet.Tick)
+
+		err := p.parseStringTables()
+		if err != nil {
+			return err
+		}
+	}
+
 	return p.processor.Error()
+}
+
+func (p *Parser) parseStringTables() error {
+	pr := barrel.NewProcessor(p.chunk.Data)
+
+	var numTables int8
+	pr.ReadInt8(&numTables)
+	if pr.Error() != nil {
+		return pr.Error()
+	}
+
+	for i := 0; i < int(numTables); i++ {
+		var tableName string
+		pr.ReadStringEOF(&tableName)
+
+		if p.isDebug {
+			fmt.Println("Table name:", tableName)
+		}
+
+		err := p.parseStringTable(pr, tableName)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *Parser) parseStringTable(pr *barrel.Processor, tableName string) error {
+	var numStrings int16
+	pr.ReadInt16(&numStrings)
+
+	for i := 0; i < int(numStrings); i++ {
+		var (
+			stringName string
+			pass       bool
+		)
+
+		pr.ReadStringEOF(&stringName)
+		pr.ReadBit(&pass)
+
+		fmt.Println(stringName)
+
+		if pass {
+			var dataSize uint16
+			pr.ReadUint16(&dataSize)
+
+			data := make([]byte, int(dataSize))
+			pr.ReadBytes(&data, int(dataSize))
+		}
+	}
+
+	var clientStaffPass bool
+	pr.ReadBit(&clientStaffPass)
+
+	if clientStaffPass {
+		var numStrings uint16
+		pr.ReadUint16(&numStrings)
+
+		for i := 0; i < int(numStrings); i++ {
+			var (
+				stringName string
+				pass       bool
+			)
+
+			pr.ReadStringEOF(&stringName)
+			pr.ReadBit(&pass)
+
+			if pass {
+				var numFields uint16
+				pr.ReadUint16(&numFields)
+				pr.Skip(int(numFields))
+			}
+
+		}
+	}
+
+	return pr.Error()
 }
