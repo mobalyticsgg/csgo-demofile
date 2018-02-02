@@ -5,25 +5,43 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/bamiaux/iobit"
+	"github.com/icza/bitio"
+)
+
+const (
+	numBitsInByte = 8
 )
 
 type Bitparser struct {
-	iobit.Reader
+	bitio.Reader
 	tempBuf *bytes.Buffer
 }
 
 func NewBitparser(buf []byte) *Bitparser {
 	return &Bitparser{
-		Reader:  iobit.NewReader(buf),
+		Reader:  bitio.NewReader(bytes.NewBuffer(buf)),
 		tempBuf: bytes.NewBuffer(make([]byte, 4096)),
 	}
 }
 
-func (b *Bitparser) ReadStringEOF() string {
+func (b *Bitparser) ReadStringWithLen(n int) (string, error) {
+	buf := make([]byte, int(n))
+	_, err := b.Read(buf)
+	if err != nil {
+		return "", err
+	}
+
+	return string(buf), nil
+}
+
+func (b *Bitparser) ReadStringEOF() (string, error) {
 	for {
-		var v byte
-		if v = b.Byte(); v == 0 || v == 10 {
+		v, err := b.ReadByte()
+		if err != nil {
+			return "", err
+		}
+
+		if v == 0 {
 			break
 		}
 
@@ -31,17 +49,63 @@ func (b *Bitparser) ReadStringEOF() string {
 	}
 
 	defer b.tempBuf.Reset()
-	return b.tempBuf.String()
+	return b.tempBuf.String(), nil
 }
 
-func (b *Bitparser) Float32() float32 {
-	return math.Float32frombits(b.Le32())
+func (b *Bitparser) ReadFloat32() (float32, error) {
+	v, err := b.ReadUint32()
+	if err != nil {
+		return 0, err
+	}
+
+	return math.Float32frombits(v), nil
 }
 
-func (b *Bitparser) LInt32() int32 {
-	buf := b.Bytes(4)
+func (b *Bitparser) ReadUint16() (uint16, error) {
+	buf := make([]byte, 2)
+	_, err := b.Read(buf)
+	if err != nil {
+		return 0, err
+	}
 
-	return int32(binary.LittleEndian.Uint32(buf))
+	return binary.LittleEndian.Uint16(buf), nil
+}
+
+func (b *Bitparser) ReadUint32() (uint32, error) {
+	buf := make([]byte, 4)
+	_, err := b.Read(buf)
+	if err != nil {
+		return 0, err
+	}
+
+	return binary.LittleEndian.Uint32(buf), nil
+}
+
+func (b *Bitparser) ReadInt32() (int32, error) {
+	buf := make([]byte, 4)
+	_, err := b.Read(buf)
+	if err != nil {
+		return 0, err
+	}
+
+	return int32(binary.LittleEndian.Uint32(buf)), nil
+}
+
+func (b *Bitparser) Skip(n int) error {
+	buf := make([]byte, n)
+	_, err := b.Read(buf)
+
+	return err
+}
+
+func (b *Bitparser) ReadBytes(n int) ([]byte, error) {
+	buf := make([]byte, n)
+	_, err := b.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
 
 // FIX

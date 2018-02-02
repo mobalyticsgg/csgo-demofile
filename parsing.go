@@ -70,12 +70,14 @@ func (p *Parser) Parse(buf []byte) error {
 }
 
 func (p *Parser) handlePacket() error {
-	p.packet.Cmd = p.bitparser.Byte()
-	p.packet.Tick = p.bitparser.LInt32()
-	p.packet.PlayerSlot = p.bitparser.Byte()
+	var err error
 
-	if p.bitparser.Error() != nil {
-		return p.bitparser.Error()
+	p.packet.Cmd, err = p.bitparser.ReadByte()
+	p.packet.Tick, err = p.bitparser.ReadInt32()
+	p.packet.PlayerSlot, err = p.bitparser.ReadByte()
+
+	if err != nil {
+		return err
 	}
 
 	cmd := command(p.packet.Cmd)
@@ -110,20 +112,21 @@ func (p *Parser) handlePacket() error {
 func (p *Parser) parseHeader() error {
 	p.header = &Header{}
 
-	p.header.Filestamp = p.bitparser.String(maxFilestampSize)
-	p.header.Protocol = p.bitparser.Le32()
-	p.header.NetworkProtocol = p.bitparser.Le32()
-	p.header.ServerName = p.bitparser.String(maxOsPath)
-	p.header.ClientName = p.bitparser.String(maxOsPath)
-	p.header.MapName = p.bitparser.String(maxOsPath)
-	p.header.GameDirectory = p.bitparser.String(maxOsPath)
-	p.header.PlaybackTime = p.bitparser.Float32()
-	p.header.PlaybackTicks = p.bitparser.Le32()
-	p.header.PlaybackFrames = p.bitparser.Le32()
-	p.header.SignOnLenght = p.bitparser.Le32()
+	var err error
+	p.header.Filestamp, err = p.bitparser.ReadStringWithLen(maxFilestampSize)
+	p.header.Protocol, err = p.bitparser.ReadUint32()
+	p.header.NetworkProtocol, err = p.bitparser.ReadUint32()
+	p.header.ServerName, err = p.bitparser.ReadStringWithLen(maxOsPath)
+	p.header.ClientName, err = p.bitparser.ReadStringWithLen(maxOsPath)
+	p.header.MapName, err = p.bitparser.ReadStringWithLen(maxOsPath)
+	p.header.GameDirectory, err = p.bitparser.ReadStringWithLen(maxOsPath)
+	p.header.PlaybackTime, err = p.bitparser.ReadFloat32()
+	p.header.PlaybackTicks, err = p.bitparser.ReadUint32()
+	p.header.PlaybackFrames, err = p.bitparser.ReadUint32()
+	p.header.SignOnLenght, err = p.bitparser.ReadUint32()
 
-	if p.bitparser.Error() != nil {
-		return p.bitparser.Error()
+	if err != nil {
+		return err
 	}
 
 	// Remove \x00 from strings
@@ -137,14 +140,26 @@ func (p *Parser) parseHeader() error {
 }
 
 func (p *Parser) parseVector(v *r3.Vector) error {
-	v.X = float64(p.bitparser.Float32())
-	v.Y = float64(p.bitparser.Float32())
-	v.Z = float64(p.bitparser.Float32())
+	var (
+		x, y, z float32
+		err     error
+	)
+	x, err = p.bitparser.ReadFloat32()
+	y, err = p.bitparser.ReadFloat32()
+	z, err = p.bitparser.ReadFloat32()
 
-	return p.bitparser.Error()
+	if err != nil {
+		return err
+	}
+
+	v.X, v.Y, v.Z = float64(x), float64(y), float64(z)
+
+	return nil
 }
 
 func (p *Parser) parseCmdInfo() error {
+	var err error
+
 	originViewParse := func(originView *OriginViewAngles) error {
 		err := p.parseVector(&originView.ViewOrigin)
 		if err != nil {
@@ -160,7 +175,7 @@ func (p *Parser) parseCmdInfo() error {
 	}
 
 	partCmdParse := func(splitCmdInfo *SplitCmdInfo) error {
-		splitCmdInfo.Flags = p.bitparser.Int32(32)
+		splitCmdInfo.Flags, err = p.bitparser.ReadInt32()
 		err := originViewParse(&splitCmdInfo.Original)
 		if err != nil {
 			return err
@@ -169,7 +184,7 @@ func (p *Parser) parseCmdInfo() error {
 		return originViewParse(&splitCmdInfo.Resampled)
 	}
 
-	err := partCmdParse(&p.cmdInfo.Parts[0])
+	err = partCmdParse(&p.cmdInfo.Parts[0])
 	if err != nil {
 		return err
 	}
@@ -179,29 +194,32 @@ func (p *Parser) parseCmdInfo() error {
 		return err
 	}
 
-	p.bitparser.Skip(8 * numBitsInByte)
+	p.bitparser.Skip(8)
 	err = p.parseChunk(cmdPacket)
 	if err != nil {
 		return err
 	}
 
-	return p.bitparser.Error()
+	return nil
 }
 
 func (p *Parser) parseChunk(cmd command) error {
-	p.chunk.Lenght = p.bitparser.Le32()
-	if p.bitparser.Error() != nil {
-		return p.bitparser.Error()
+	var err error
+
+	p.chunk.Lenght, err = p.bitparser.ReadUint32()
+	if err != nil {
+		return err
 	}
 
 	// Skip commands
 	if cmd == cmdUser || cmd == cmdConsole || cmd == cmdPacket {
-		p.bitparser.Skip(uint(p.chunk.Lenght * numBitsInByte))
-
-		return p.bitparser.Error()
+		return p.bitparser.Skip(int(p.chunk.Lenght))
 	}
 
-	p.chunk.Data = p.bitparser.Bytes(int(p.chunk.Lenght))
+	p.chunk.Data, err = p.bitparser.ReadBytes(int(p.chunk.Lenght))
+	if err != nil {
+		return err
+	}
 
 	if cmd == cmdStringTables {
 		fmt.Println(cmd)
@@ -213,24 +231,28 @@ func (p *Parser) parseChunk(cmd command) error {
 		}
 	}
 
-	return p.bitparser.Error()
+	return nil
 }
 
 func (p *Parser) parseStringTables() error {
 	br := bitparser.NewBitparser(p.chunk.Data)
 
-	numTables := br.Byte()
-	if br.Error() != nil {
-		return br.Error()
+	numTables, err := br.ReadByte()
+	if err != nil {
+		return err
 	}
 
 	for i := 0; i < int(numTables); i++ {
-		tableName := br.ReadStringEOF()
+		tableName, err := br.ReadStringEOF()
+		if err != nil {
+			return err
+		}
+
 		if p.isDebug {
 			fmt.Println("Table name:", tableName)
 		}
 
-		err := p.parseStringTable(br, tableName)
+		err = p.parseStringTable(br, tableName)
 		if err != nil {
 			return err
 		}
@@ -240,32 +262,66 @@ func (p *Parser) parseStringTables() error {
 }
 
 func (p *Parser) parseStringTable(br *bitparser.Bitparser, tableName string) error {
-	numStrings := br.Le16()
+	numStrings, err := br.ReadUint16()
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("num:", numStrings)
 	for i := 0; i < int(numStrings); i++ {
-		stringName := br.ReadStringEOF()
+		stringName, err := br.ReadStringEOF()
+		if err != nil {
+			return err
+		}
 		fmt.Println(stringName)
 
-		pass := br.Bit()
+		pass, err := br.ReadBool()
+		if err != nil {
+			return err
+		}
+
 		fmt.Println(pass)
 		if pass {
-			dataSize := br.Le16()
+			dataSize, err := br.ReadUint16()
+			if err != nil {
+				return err
+			}
+
 			fmt.Println(dataSize)
-			br.Bytes(int(dataSize))
+			br.ReadBytes(int(dataSize))
 		}
 	}
 
-	if br.Bit() {
-		numStrings := br.Le16()
+	pass, err := br.ReadBool()
+	if err != nil {
+		return err
+	}
+
+	if pass {
+		numStrings, err := br.ReadUint16()
+		if err != nil {
+			return err
+		}
+
 		for i := 0; i < int(numStrings); i++ {
 			br.ReadStringEOF()
-			if br.Bit() {
-				numFields := br.Le16()
-				br.Skip(uint(numFields * numBitsInByte))
+
+			pass, err := br.ReadBool()
+			if err != nil {
+				return err
+			}
+
+			if pass {
+				numFields, err := br.ReadUint16()
+				if err != nil {
+					return err
+				}
+
+				br.Skip(int(numFields))
 			}
 
 		}
 	}
 
-	return br.Error()
+	return nil
 }
