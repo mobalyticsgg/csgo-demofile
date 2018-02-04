@@ -6,6 +6,7 @@ import (
 	"os"
 )
 
+// Demofile represents main info about demofile
 type Demofile struct {
 	file *os.File
 	size int64
@@ -16,6 +17,7 @@ type Demofile struct {
 	isDebug bool
 }
 
+// NewDemofile creates Demofile structs with basis things
 func NewDemofile(file string, isDebug bool) (*Demofile, error) {
 	readFile, err := os.Open(file)
 	if err != nil {
@@ -36,6 +38,7 @@ func NewDemofile(file string, isDebug bool) (*Demofile, error) {
 	}, nil
 }
 
+// Start starts moving via demofile and execute events
 func (d *Demofile) Start() error {
 	defer d.file.Close()
 
