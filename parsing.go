@@ -72,9 +72,9 @@ func (p *Parser) Parse(buf []byte) error {
 func (p *Parser) handlePacket() error {
 	var err error
 
-	p.packet.Cmd, err = p.bitparser.ReadByte()
+	p.packet.Cmd = p.bitparser.ReadSingleByte()
 	p.packet.Tick, err = p.bitparser.ReadInt32()
-	p.packet.PlayerSlot, err = p.bitparser.ReadByte()
+	p.packet.PlayerSlot = p.bitparser.ReadSingleByte()
 
 	if err != nil {
 		return err
@@ -216,10 +216,7 @@ func (p *Parser) parseChunk(cmd command) error {
 		return p.bitparser.Skip(int(p.chunk.Lenght))
 	}
 
-	p.chunk.Data, err = p.bitparser.ReadBytes(int(p.chunk.Lenght))
-	if err != nil {
-		return err
-	}
+	p.chunk.Data = p.bitparser.ReadBytes(int(p.chunk.Lenght))
 
 	if cmd == cmdStringTables {
 		fmt.Println(cmd)
@@ -237,10 +234,7 @@ func (p *Parser) parseChunk(cmd command) error {
 func (p *Parser) parseStringTables() error {
 	br := bitparser.NewBitparser(p.chunk.Data)
 
-	numTables, err := br.ReadByte()
-	if err != nil {
-		return err
-	}
+	numTables := br.ReadSingleByte()
 
 	for i := 0; i < int(numTables); i++ {
 		tableName, err := br.ReadStringEOF()
@@ -275,10 +269,7 @@ func (p *Parser) parseStringTable(br *bitparser.Bitparser, tableName string) err
 		}
 		fmt.Println(stringName)
 
-		pass, err := br.ReadBool()
-		if err != nil {
-			return err
-		}
+		pass := br.ReadBit()
 
 		fmt.Println(pass)
 		if pass {
@@ -292,10 +283,7 @@ func (p *Parser) parseStringTable(br *bitparser.Bitparser, tableName string) err
 		}
 	}
 
-	pass, err := br.ReadBool()
-	if err != nil {
-		return err
-	}
+	pass := br.ReadBit()
 
 	if pass {
 		numStrings, err := br.ReadUint16()
@@ -306,10 +294,7 @@ func (p *Parser) parseStringTable(br *bitparser.Bitparser, tableName string) err
 		for i := 0; i < int(numStrings); i++ {
 			br.ReadStringEOF()
 
-			pass, err := br.ReadBool()
-			if err != nil {
-				return err
-			}
+			pass := br.ReadBit()
 
 			if pass {
 				numFields, err := br.ReadUint16()

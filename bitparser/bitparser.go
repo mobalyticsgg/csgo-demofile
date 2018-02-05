@@ -2,10 +2,9 @@ package bitparser
 
 import (
 	"bytes"
-	"encoding/binary"
 	"math"
 
-	"github.com/icza/bitio"
+	bitread "github.com/markus-wa/gobitread"
 )
 
 const (
@@ -13,34 +12,27 @@ const (
 )
 
 type Bitparser struct {
-	bitio.Reader
+	*bitread.BitReader
 	tempBuf *bytes.Buffer
 }
 
 func NewBitparser(buf []byte) *Bitparser {
+	br := &bitread.BitReader{}
+	br.Open(bytes.NewBuffer(buf), 1024*128)
+
 	return &Bitparser{
-		Reader:  bitio.NewReader(bytes.NewBuffer(buf)),
-		tempBuf: bytes.NewBuffer(make([]byte, 4096)),
+		BitReader: br,
+		tempBuf:   bytes.NewBuffer(make([]byte, 4096)),
 	}
 }
 
 func (b *Bitparser) ReadStringWithLen(n int) (string, error) {
-	buf := make([]byte, int(n))
-	_, err := b.Read(buf)
-	if err != nil {
-		return "", err
-	}
-
-	return string(buf), nil
+	return b.ReadCString(n), nil
 }
 
 func (b *Bitparser) ReadStringEOF() (string, error) {
 	for {
-		v, err := b.ReadByte()
-		if err != nil {
-			return "", err
-		}
-
+		v := b.ReadSingleByte()
 		if v == 0 {
 			break
 		}
@@ -62,50 +54,36 @@ func (b *Bitparser) ReadFloat32() (float32, error) {
 }
 
 func (b *Bitparser) ReadUint16() (uint16, error) {
-	buf := make([]byte, 2)
-	_, err := b.Read(buf)
+	v, err := b.ReadUint16()
 	if err != nil {
 		return 0, err
 	}
 
-	return binary.LittleEndian.Uint16(buf), nil
+	return v, nil
 }
 
 func (b *Bitparser) ReadUint32() (uint32, error) {
-	buf := make([]byte, 4)
-	_, err := b.Read(buf)
+	v, err := b.ReadUint32()
 	if err != nil {
 		return 0, err
 	}
 
-	return binary.LittleEndian.Uint32(buf), nil
+	return v, nil
 }
 
 func (b *Bitparser) ReadInt32() (int32, error) {
-	buf := make([]byte, 4)
-	_, err := b.Read(buf)
+	v, err := b.ReadInt32()
 	if err != nil {
 		return 0, err
 	}
 
-	return int32(binary.LittleEndian.Uint32(buf)), nil
+	return v, nil
 }
 
 func (b *Bitparser) Skip(n int) error {
-	buf := make([]byte, n)
-	_, err := b.Read(buf)
+	b.ReadBytes(n)
 
-	return err
-}
-
-func (b *Bitparser) ReadBytes(n int) ([]byte, error) {
-	buf := make([]byte, n)
-	_, err := b.Read(buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf, nil
+	return nil
 }
 
 // FIX
