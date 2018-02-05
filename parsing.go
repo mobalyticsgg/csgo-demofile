@@ -58,10 +58,6 @@ func (p *Parser) Parse(buf []byte) error {
 	for {
 		err := p.handlePacket()
 		if err != nil {
-			if err == errNotSufficientBytes {
-				break
-			}
-
 			return err
 		}
 	}
@@ -235,7 +231,6 @@ func (p *Parser) parseStringTables() error {
 	br := bitparser.NewBitparser(p.chunk.Data)
 
 	numTables := br.ReadSingleByte()
-
 	for i := 0; i < int(numTables); i++ {
 		tableName, err := br.ReadStringEOF()
 		if err != nil {

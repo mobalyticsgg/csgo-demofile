@@ -18,7 +18,7 @@ type Bitparser struct {
 
 func NewBitparser(buf []byte) *Bitparser {
 	br := &bitread.BitReader{}
-	br.Open(bytes.NewBuffer(buf), 1024*128)
+	br.Open(bytes.NewBuffer(buf), 4096)
 
 	return &Bitparser{
 		BitReader: br,
